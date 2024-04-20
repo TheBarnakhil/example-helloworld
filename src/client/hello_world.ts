@@ -17,6 +17,9 @@ import * as borsh from 'borsh';
 
 import {getPayer, getRpcUrl, createKeypairFromFile} from './utils';
 
+import * as BufferLayout from '@solana/buffer-layout';
+import { Buffer } from 'buffer';
+
 /**
  * Connection to the network
  */
@@ -155,8 +158,6 @@ export async function checkProgram(): Promise<void> {
     } else {
       throw new Error('Program needs to be built and deployed');
     }
-  } else if (!programInfo.executable) {
-    throw new Error(`Program is not executable`);
   }
   console.log(`Using program ${programId.toBase58()}`);
 
@@ -195,6 +196,27 @@ export async function checkProgram(): Promise<void> {
   }
 }
 
+export const createIncrement = () : Buffer => {
+  const layout = BufferLayout.struct([BufferLayout.u8('instruction')]);
+  const data = Buffer.alloc(layout.span);
+  layout.encode({instruction: 0}, data);
+  return data;
+}
+
+export const createDeccrement = () : Buffer => {
+  const layout = BufferLayout.struct([BufferLayout.u8('instruction')]);
+  const data = Buffer.alloc(layout.span);
+  layout.encode({instruction: 1}, data);
+  return data;
+}
+
+export const SetInstruction = () : Buffer => {
+  const layout = BufferLayout.struct([BufferLayout.u8('instruction'), BufferLayout.u32('counter')]);
+  const data = Buffer.alloc(layout.span);
+  layout.encode({instruction: 2, counter: 100}, data);
+  return data;
+}
+
 /**
  * Say hello
  */
@@ -203,7 +225,7 @@ export async function sayHello(): Promise<void> {
   const instruction = new TransactionInstruction({
     keys: [{pubkey: greetedPubkey, isSigner: false, isWritable: true}],
     programId,
-    data: Buffer.alloc(0), // All instructions are hellos
+    data: SetInstruction(), // All instructions are hellos
   });
   await sendAndConfirmTransaction(
     connection,

@@ -8,6 +8,9 @@ use solana_program::{
     pubkey::Pubkey,
 };
 
+pub mod instruction;
+use crate::instruction::HelloWorldInstruction;
+
 /// Define the type of state stored in accounts
 #[derive(BorshSerialize, BorshDeserialize, Debug)]
 pub struct GreetingAccount {
@@ -22,12 +25,18 @@ entrypoint!(process_instruction);
 pub fn process_instruction(
     program_id: &Pubkey, // Public key of the account the hello world program was loaded into
     accounts: &[AccountInfo], // The account to say hello to
-    _instruction_data: &[u8], // Ignored, all helloworld instructions are hellos
+    instruction_data: &[u8], // Ignored, all helloworld instructions are hellos
 ) -> ProgramResult {
     msg!("Hello World Rust program entrypoint");
 
     // Iterating accounts is safer than indexing
     let accounts_iter = &mut accounts.iter();
+
+    msg!("Instruction data: {:?}", instruction_data);
+
+    //Calling the unpack function
+    let instruction = HelloWorldInstruction::unpack(instruction_data)?;
+    msg!("Instruction enum: {:?}", instruction);
 
     // Get the account to say hello to
     let account = next_account_info(accounts_iter)?;
@@ -40,7 +49,17 @@ pub fn process_instruction(
 
     // Increment and store the number of times the account has been greeted
     let mut greeting_account = GreetingAccount::try_from_slice(&account.data.borrow())?;
-    greeting_account.counter += 1;
+    match instruction {
+        HelloWorldInstruction::Increment => {
+            greeting_account.counter += 1;
+        }
+        HelloWorldInstruction::Decrement => {
+            greeting_account.counter -= 1;
+        }
+        HelloWorldInstruction::Set(value) => {
+            greeting_account.counter = value;
+        }
+    }
     greeting_account.serialize(&mut &mut account.data.borrow_mut()[..])?;
 
     msg!("Greeted {} time(s)!", greeting_account.counter);
@@ -72,7 +91,6 @@ mod test {
             false,
             Epoch::default(),
         );
-        let instruction_data: Vec<u8> = Vec::new();
 
         let accounts = vec![account];
 
@@ -82,6 +100,7 @@ mod test {
                 .counter,
             0
         );
+        let mut instruction_data = vec![0; 5];
         process_instruction(&program_id, &accounts, &instruction_data).unwrap();
         assert_eq!(
             GreetingAccount::try_from_slice(&accounts[0].data.borrow())
@@ -89,12 +108,78 @@ mod test {
                 .counter,
             1
         );
+
+        instruction_data = vec![1; 5];
+
         process_instruction(&program_id, &accounts, &instruction_data).unwrap();
         assert_eq!(
             GreetingAccount::try_from_slice(&accounts[0].data.borrow())
                 .unwrap()
                 .counter,
-            2
+            0
+        );
+
+        //converts to [100, 0, 0, 0]
+        let arr = u32::to_le_bytes(100);
+        instruction_data = vec![2; 5];
+        for i in 0..4 {
+            instruction_data[i+1] = arr[i];
+        }
+
+        process_instruction(&program_id, &accounts, &instruction_data).unwrap();
+        assert_eq!(
+            GreetingAccount::try_from_slice(&accounts[0].data.borrow())
+                .unwrap()
+                .counter,
+            100
+        );
+
+        instruction_data = vec![1; 5];
+
+        process_instruction(&program_id, &accounts, &instruction_data).unwrap();
+        assert_eq!(
+            GreetingAccount::try_from_slice(&accounts[0].data.borrow())
+                .unwrap()
+                .counter,
+            99
+        );
+    }
+
+
+    #[test]
+    #[should_panic]
+    fn test_fail() {
+        let program_id = Pubkey::default();
+        let key = Pubkey::default();
+        let mut lamports = 0;
+        let mut data = vec![0; mem::size_of::<u32>()];
+        let owner = Pubkey::default();
+        let account = AccountInfo::new(
+            &key,
+            false,
+            true,
+            &mut lamports,
+            &mut data,
+            &owner,
+            false,
+            Epoch::default(),
+        );
+
+        let accounts = vec![account];
+
+        assert_eq!(
+            GreetingAccount::try_from_slice(&accounts[0].data.borrow())
+                .unwrap()
+                .counter,
+            0
+        );
+        let instruction_data = vec![1; 5];
+        process_instruction(&program_id, &accounts, &instruction_data).unwrap();
+        assert_eq!(
+            GreetingAccount::try_from_slice(&accounts[0].data.borrow())
+                .unwrap()
+                .counter,
+            1
         );
     }
 }
